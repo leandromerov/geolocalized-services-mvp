@@ -7,6 +7,7 @@
 ![Leaflet](https://img.shields.io/badge/Leaflet-1.9-199900?logo=leaflet&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
+![CI](https://github.com/leandromerov/geolocalized-services-mvp/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## The problem
@@ -83,6 +84,8 @@ docker run -p 8000:8000 --env-file .env geolocalized-services-mvp
 ```bash
 pytest -q
 ```
+
+The suite covers the geospatial maths, the search/ranking logic and the HTTP layer (FastAPI `TestClient`). CI runs it on every push and also builds the Docker image.
 
 ## Roadmap
 
