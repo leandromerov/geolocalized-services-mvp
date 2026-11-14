@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nearby Services · MVP</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root { --bg:#0b1220; --panel:#131c2e; --text:#e2e8f0; --muted:#94a3b8; --accent:#6366f1; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); display:grid; grid-template-columns:360px 1fr; height:100vh; }
+    aside { padding:20px; overflow-y:auto; background:var(--panel); }
+    h1 { font-size:1.2rem; margin:0 0 4px; }
+    p.sub { color:var(--muted); margin:0 0 16px; font-size:.9rem; }
+    label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
+    select, input[type=range] { width:100%; }
+    select { padding:8px; border-radius:8px; background:var(--bg); color:var(--text); border:1px solid #1f2a44; }
+    button { margin-top:14px; width:100%; padding:10px; border:none; border-radius:10px; background:var(--accent); color:white; font-weight:600; cursor:pointer; }
+    .card { background:var(--bg); border:1px solid #1f2a44; border-radius:10px; padding:12px; margin-top:10px; cursor:pointer; }
+    .card:hover { border-color:var(--accent); }
+    .card strong { display:block; }
+    .meta { color:var(--muted); font-size:.85rem; display:flex; justify-content:space-between; margin-top:4px; }
+    #map { height:100vh; }
+    @media (max-width:800px) { body { grid-template-columns:1fr; grid-template-rows:auto 60vh; } #map { height:60vh; } }
+  </style>
+</head>
+<body>
+  <aside>
+    <h1>📍 Nearby Services</h1>
+    <p class="sub">Find trusted home-service providers around you.</p>
+
+    <label for="category">Category</label>
+    <select id="category"><option value="">All categories</option></select>
+
+    <label for="radius">Radius: <span id="radius-value">5</span> km</label>
+    <input id="radius" type="range" min="1" max="30" value="5" />
+
+    <button id="locate">Use my location</button>
+    <div id="results"></div>
+  </aside>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const DEFAULT_POSITION = { lat: 48.5745, lng: 13.46 }; // Passau city centre
+    let position = { ...DEFAULT_POSITION };
+    const map = L.map('map').setView([position.lat, position.lng], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+    const markers = L.layerGroup().addTo(map);
+    let radiusCircle;
+
+    const $ = (id) => document.getElementById(id);
+    const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
+
+    async function loadCategories() {
+      const categories = await (await fetch('/api/categories')).json();
+      for (const c of categories) $('category').add(new Option(c[0].toUpperCase() + c.slice(1), c));
+    }
+
+    async function search() {
+      const params = new URLSearchParams({ lat: position.lat, lng: position.lng, radius_km: $('radius').value });
+      if ($('category').value) params.set('category', $('category').value);
+      const providers = await (await fetch(`/api/providers/nearby?${params}`)).json();
+
+      markers.clearLayers();
+      radiusCircle?.remove();
+      radiusCircle = L.circle([position.lat, position.lng], { radius: $('radius').value * 1000, color: '#6366f1', fillOpacity: 0.06 }).addTo(map);
+      L.circleMarker([position.lat, position.lng], { radius: 8, color: '#22c55e', fillOpacity: 1 }).addTo(markers).bindPopup('You are here');
+
+      $('results').innerHTML = providers.length ? '' : '<p class="sub">No providers found in this area.</p>';
+      for (const p of providers) {
+        const marker = L.marker([p.lat, p.lng]).addTo(markers)
+          .bindPopup(`<b>${escapeHtml(p.name)}</b><br>${escapeHtml(p.category)} · ⭐ ${p.rating}<br>${p.hourly_rate_eur} €/h`);
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `<strong>${escapeHtml(p.name)}</strong>
+          <div class="meta"><span>${escapeHtml(p.category)} · ⭐ ${p.rating}</span><span>${p.distance_km} km · ${p.hourly_rate_eur} €/h</span></div>`;
+        card.addEventListener('click', () => { map.setView([p.lat, p.lng], 16); marker.openPopup(); });
+        $('results').append(card);
+      }
+    }
+
+    $('locate').addEventListener('click', () => {
+      if (!navigator.geolocation) return search();
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => { position = { lat: coords.latitude, lng: coords.longitude }; map.setView([position.lat, position.lng], 14); search(); },
+        () => search(), // permission denied → keep the demo location
+        { enableHighAccuracy: true, timeout: 8000 },
+      );
+    });
+    $('radius').addEventListener('input', (e) => { $('radius-value').textContent = e.target.value; });
+    $('radius').addEventListener('change', search);
+    $('category').addEventListener('change', search);
+
+    loadCategories().then(search);
+  </script>
+</body>
+</html>
